@@ -37,3 +37,12 @@ export interface ExtractionResult {
   count: number;
   images: ImageCandidate[];
 }
+
+/**
+ * Events streamed by `POST /api/extract` as the pipeline progresses.
+ * The final event is either `result` or `error`.
+ */
+export type ExtractionStreamEvent =
+  | { type: "progress"; progress: ExtractionProgressState }
+  | { type: "result"; result: ExtractionResult }
+  | { type: "error"; error: string };

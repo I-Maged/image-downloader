@@ -5,7 +5,7 @@
 
 import { chromium } from "@playwright/test";
 import { isDetailPageUrl, normalizeImageUrl, resolveSrcset } from "./image-resolver";
-import type { ImageCandidate } from "./types";
+import { type ExtractionProgressState, ExtractionStage, type ExtractionStatus, type ImageCandidate } from "./types";
 
 const VIEWPORT = { width: 1920, height: 1080 };
 const USER_AGENT =
@@ -14,6 +14,11 @@ const INITIAL_RENDER_WAIT_MS = 2000;
 const MAX_SCROLLS = 5;
 const SCROLL_STEP_PX = 800;
 const SCROLL_DELAY_MS = 150;
+
+export interface ScrapeImagesOptions {
+  /** Optional progress callback invoked at each pipeline stage transition. */
+  onProgress?: (progress: ExtractionProgressState) => void;
+}
 
 interface RawExtractedImage {
   src?: string;
@@ -28,7 +33,17 @@ interface RawExtractedImage {
  * Single entry point: scrape a page and return its image candidates
  * resolved to the highest available source quality.
  */
-export async function scrapeImages(targetUrl: string): Promise<ImageCandidate[]> {
+export async function scrapeImages(
+  targetUrl: string,
+  options: ScrapeImagesOptions = {},
+): Promise<ImageCandidate[]> {
+  const { onProgress } = options;
+
+  const emitProgress = (stage: ExtractionStage, status: ExtractionStatus, message: string) => {
+    onProgress?.({ stage, status, message });
+  };
+
+  emitProgress(ExtractionStage.Connecting, "in-progress", "Connecting to page...");
   const browser = await chromium.launch({ headless: true });
 
   try {
@@ -38,6 +53,7 @@ export async function scrapeImages(targetUrl: string): Promise<ImageCandidate[]>
     });
     const page = await context.newPage();
 
+    emitProgress(ExtractionStage.LazyLoading, "in-progress", "Executing dynamic JavaScript & lazy-loading...");
     await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(INITIAL_RENDER_WAIT_MS);
 
@@ -47,6 +63,18 @@ export async function scrapeImages(targetUrl: string): Promise<ImageCandidate[]>
       await page.waitForTimeout(SCROLL_DELAY_MS);
     }
 
+    // Wait for lazy-loaded images to finish loading before reading dimensions,
+    // otherwise `naturalWidth`/`naturalHeight` are 0 and everything gets filtered out.
+    await page.evaluate(() => {
+      const images = Array.from(document.images);
+      return Promise.all(
+        images.map((image) =>
+          image.complete ? Promise.resolve() : image.decode().catch(() => Promise.resolve()),
+        ),
+      );
+    });
+
+    emitProgress(ExtractionStage.Analyzing, "in-progress", "Analyzing high-resolution sources & metadata...");
     const rawImages = (await page.evaluate((): RawExtractedImage[] => {
       const results: RawExtractedImage[] = [];
 
@@ -85,6 +113,15 @@ export async function scrapeImages(targetUrl: string): Promise<ImageCandidate[]>
 
       const normalized = await normalizeImageUrl(sourceUrl);
 
+      console.log("[image-diagnostic]", {
+        src: raw.src,
+        srcSet: raw.srcSet,
+        sourceUrl: normalized,
+        width: raw.width,
+        height: raw.height,
+        detailHref: raw.detailHref,
+      });
+
       images.push({
         id: `img-${index}`,
         sourceUrl: normalized,
@@ -95,6 +132,8 @@ export async function scrapeImages(targetUrl: string): Promise<ImageCandidate[]>
         alt: raw.alt,
       });
     }
+
+    emitProgress(ExtractionStage.Ready, "complete", "Ready!");
 
     return images;
   } finally {

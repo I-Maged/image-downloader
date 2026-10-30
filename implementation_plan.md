@@ -223,12 +223,14 @@ downloader/
 - [x] **Step 3: Server API Endpoints**
   - Implement `app/api/extract/route.ts` with input validation, scraping execution, and error handling.
   - Implement `app/api/download/route.ts` with single-file proxying and streaming multi-file ZIP generation.
-- [ ] **Step 4: Frontend UI Components**
+  - Stream extraction progress from `app/api/extract/route.ts` as NDJSON events (`progress` / `result` / `error`).
+- [x] **Step 4: Frontend UI Components**
   - Build `UrlInputBar.tsx` with loading states.
   - Build `ExtractionProgress.tsx` displaying step-by-step progress.
   - Build `GalleryToolbar.tsx` with selection helpers and batch download button.
   - Build `ImageCard.tsx` and `ImageGrid.tsx` with selection checkboxes and dimension badges.
   - Build `LightboxModal.tsx` for full-screen inspection.
+  - Wire `app/page.tsx` client dashboard to consume the streaming `/api/extract` and `/api/download` endpoints.
 - [ ] **Step 5: End-to-End Testing & Verification**
   - Test with the user's Unsplash example (`https://unsplash.com/` and individual photo detail pages) to verify source resolution (e.g., 1946 × 2455).
   - Test on standard non-Unsplash websites (blogs, e-commerce, documentation) to verify universal compatibility.
