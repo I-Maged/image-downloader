@@ -213,10 +213,10 @@ downloader/
 
 ## 7. Step-by-Step Implementation Roadmap
 
-- [ ] **Step 1: Install Dependencies**
+- [x] **Step 1: Install Dependencies**
   - Install `playwright`, `archiver`, `@types/archiver`, and `lucide-react`.
   - Run `npx playwright install chromium` to ensure headless browser binary is ready.
-- [ ] **Step 2: Core Resolution Utilities**
+- [x] **Step 2: Core Resolution Utilities**
   - Create `lib/types.ts` defining data models (`ImageCandidate`, `ExtractionProgressState`).
   - Create `lib/image-resolver.ts` with `srcset` parsing, CDN query clearing, and detail-link resolvers.
   - Create `lib/scraper.ts` with Playwright browser management, auto-scrolling, and DOM extraction.
