@@ -55,7 +55,7 @@ export default function Home() {
       const response = await fetch("/api/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, minSize: 0 }),
       });
 
       if (!response.ok || !response.body) {

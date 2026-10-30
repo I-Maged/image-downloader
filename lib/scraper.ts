@@ -14,6 +14,8 @@ const INITIAL_RENDER_WAIT_MS = 2000;
 const MAX_SCROLLS = 5;
 const SCROLL_STEP_PX = 800;
 const SCROLL_DELAY_MS = 150;
+const NAVIGATION_TIMEOUT_MS = 30000;
+const IMAGE_WAIT_TIMEOUT_MS = 3000;
 
 export interface ScrapeImagesOptions {
   /** Optional progress callback invoked at each pipeline stage transition. */
@@ -52,9 +54,10 @@ export async function scrapeImages(
       userAgent: USER_AGENT,
     });
     const page = await context.newPage();
+    page.setDefaultTimeout(NAVIGATION_TIMEOUT_MS);
 
     emitProgress(ExtractionStage.LazyLoading, "in-progress", "Executing dynamic JavaScript & lazy-loading...");
-    await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
+    await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: NAVIGATION_TIMEOUT_MS });
     await page.waitForTimeout(INITIAL_RENDER_WAIT_MS);
 
     // Progressive auto-scroll to trigger lazy-loaded images.
@@ -65,14 +68,10 @@ export async function scrapeImages(
 
     // Wait for lazy-loaded images to finish loading before reading dimensions,
     // otherwise `naturalWidth`/`naturalHeight` are 0 and everything gets filtered out.
-    await page.evaluate(() => {
-      const images = Array.from(document.images);
-      return Promise.all(
-        images.map((image) =>
-          image.complete ? Promise.resolve() : image.decode().catch(() => Promise.resolve()),
-        ),
-      );
-    });
+    await page.waitForFunction(
+      () => Array.from(document.images).every((image) => image.complete),
+      { timeout: IMAGE_WAIT_TIMEOUT_MS },
+    ).catch(() => undefined);
 
     emitProgress(ExtractionStage.Analyzing, "in-progress", "Analyzing high-resolution sources & metadata...");
     const rawImages = (await page.evaluate((): RawExtractedImage[] => {
@@ -85,19 +84,49 @@ export async function scrapeImages(
           img.src ||
           (img.getAttribute("data-src") as string) ||
           (img.getAttribute("data-original") as string) ||
+          (img.getAttribute("data-lazy-src") as string) ||
           (img.getAttribute("data-zoom-image") as string) ||
+          (img.getAttribute("data-srcset")?.split(",")[0]?.trim().split(/\s+/)[0] as string) ||
           "";
-        const srcSet = img.getAttribute("srcset") ?? undefined;
+        const srcSet =
+          img.getAttribute("srcset") ||
+          img.getAttribute("data-srcset") ||
+          undefined;
         const anchor = img.closest("a") as HTMLAnchorElement | null;
 
         results.push({
           src,
           srcSet,
           alt: img.alt ?? undefined,
-          width: img.naturalWidth,
-          height: img.naturalHeight,
+          width: img.naturalWidth || img.width || 0,
+          height: img.naturalHeight || img.height || 0,
           detailHref: anchor ? anchor.href : undefined,
         });
+      }
+
+      // `<picture>` blocks often carry higher-resolution `source` candidates than their fallback `img`.
+      const pictures = Array.from(document.querySelectorAll("picture"));
+      for (const picture of pictures) {
+        const fallbackImg = picture.querySelector("img");
+        const anchor = picture.closest("a") as HTMLAnchorElement | null;
+        const sources = Array.from(picture.querySelectorAll("source"));
+
+        for (const source of sources) {
+          const rawSrc =
+            source.getAttribute("src") ||
+            source.getAttribute("srcset")?.split(",")[0]?.trim().split(/\s+/)[0] ||
+            "";
+          if (!rawSrc) continue;
+
+          results.push({
+            src: rawSrc,
+            srcSet: source.getAttribute("srcset") ?? undefined,
+            alt: fallbackImg?.alt ?? undefined,
+            width: fallbackImg?.naturalWidth || fallbackImg?.width || 0,
+            height: fallbackImg?.naturalHeight || fallbackImg?.height || 0,
+            detailHref: anchor ? anchor.href : undefined,
+          });
+        }
       }
 
       return results;
@@ -111,7 +140,14 @@ export async function scrapeImages(
 
       if (!sourceUrl) continue;
 
-      const normalized = await normalizeImageUrl(sourceUrl);
+      let absoluteSource = sourceUrl;
+      try {
+        absoluteSource = new URL(sourceUrl, targetUrl).toString();
+      } catch {
+        absoluteSource = sourceUrl;
+      }
+
+      const normalized = await normalizeImageUrl(absoluteSource);
 
       console.log("[image-diagnostic]", {
         src: raw.src,
@@ -130,6 +166,7 @@ export async function scrapeImages(
         width: raw.width ?? 0,
         height: raw.height ?? 0,
         alt: raw.alt,
+        pageUrl: targetUrl,
       });
     }
 

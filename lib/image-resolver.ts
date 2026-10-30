@@ -82,7 +82,10 @@ export async function normalizeImageUrl(rawUrl: string): Promise<string> {
   }
 
   // Strip path-based resize segments, e.g. "/w_400,h_300/".
-  url = url.replace(/\/[a-z][a-z0-9]*_[\d,]+/g, "/");
+  url = url.replace(/\/[a-z][a-z0-9]*_\d+(?:,[a-z][a-z0-9]*_\d+)*/gi, "");
+
+  // Clean WordPress dimension suffixes, e.g. image-150x150.jpg -> image.jpg.
+  url = url.replace(/-\d+x\d+(?=\.[a-zA-Z]{3,4}(?:[?#].*)?$)/, "");
 
   return url;
 }
@@ -107,10 +110,17 @@ export function isDetailPageUrl(url: string | null | undefined): boolean {
 }
 
 function metaContent(html: string, key: string): string | undefined {
-  const metaTag = html.match(new RegExp(`<meta[^>]+${key}[^>]*>`, "i"));
-  if (!metaTag?.[0]) return undefined;
-  const content = metaTag[0].match(/content=["']([^"']*)["']/i);
-  return content?.[1];
+  const metaTagRegex = /<meta\s+[^>]*>/gi;
+  for (const match of html.matchAll(metaTagRegex)) {
+    const tag = match[0];
+    const attributeMatch = tag.match(/(?:property|name)\s*=\s*["']([^"']+)["']/i);
+    if (!attributeMatch || attributeMatch[1].toLowerCase() !== key.toLowerCase()) continue;
+
+    const contentMatch = tag.match(/content\s*=\s*["']([^"']*)["']/i);
+    if (contentMatch?.[1]) return contentMatch[1];
+  }
+
+  return undefined;
 }
 
 /**
@@ -129,12 +139,13 @@ export async function resolveMasterAsset(detailUrl: string): Promise<string | un
 
     const ogImage = metaContent(html, "og:image");
     const twitterImage = metaContent(html, "twitter:image");
-    const jsonLd = html.match(/"contentUrl"\s*:\s*"([^"]+)"/);
+    const jsonLd = html.match(/["']contentUrl["']\s*:\s*["']([^"']+)["']/);
 
     const rawImage = ogImage ?? twitterImage ?? jsonLd?.[1];
     if (!rawImage) return undefined;
 
-    return normalizeImageUrl(rawImage);
+    const resolved = new URL(rawImage, detailUrl).toString();
+    return normalizeImageUrl(resolved);
   } catch {
     return undefined;
   }

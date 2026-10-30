@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Fixture Gallery</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+    img { max-width: 100%; height: auto; }
+  </style>
+</head>
+<body>
+  <h1>Fixture Gallery</h1>
+  <div class="grid">
+    <img
+      id="srcset-hero"
+      src="/test-fixtures/images/photo.png"
+      srcset="/test-fixtures/images/photo.png 800w, /test-fixtures/images/hero.png 1600w"
+      width="800"
+      height="600"
+      alt="Srcset hero"
+    />
+
+    <img
+      id="lazy-master"
+      data-src="/test-fixtures/images/master.png"
+      data-original="/test-fixtures/images/master.png"
+      width="2000"
+      height="1500"
+      alt="Lazy loaded master"
+    />
+
+    <picture>
+      <source
+        srcset="/test-fixtures/images/hero.png 2x"
+        type="image/png"
+      />
+      <img
+        src="/test-fixtures/images/photo.png"
+        width="800"
+        height="600"
+        alt="Picture fallback"
+      />
+    </picture>
+
+    <a href="/test-fixtures/photos/detail.html?img=hero.png">
+      <img
+        src="/test-fixtures/images/icon.png"
+        width="100"
+        height="100"
+        alt="Wrapped thumbnail"
+      />
+    </a>
+
+    <img
+      src="/test-fixtures/images/photo.png"
+      width="800"
+      height="600"
+      alt="Duplicate photo"
+    />
+  </div>
+</body>
+</html>

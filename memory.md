@@ -1,6 +1,6 @@
 # Memory — Universal High-Resolution Image Extractor & Downloader
 
-Last updated: Fri Oct 30, 2026
+Last updated: Fri Oct 30, 2026 (Step 5 completed)
 
 ## What was built
 
@@ -24,12 +24,16 @@ Last updated: Fri Oct 30, 2026
 
 - `npx tsc --noEmit` passes cleanly.
 - `npm run build` succeeds; routes registered: `/` static, `/_not-found` static, `/api/download` dynamic, `/api/extract` dynamic.
-- `implementation_plan.md`: Steps 1, 2, 3 checked off as done (Steps 4–5 remain open).
+- `implementation_plan.md`: Steps 1–5 checked off as done.
 - Repo baseline: Next.js 16.4.3, React 19.3, TypeScript 5, Tailwind v4; `app/` had only favicon/globals/layout/page before API routes added; `next.config.ts` has `cacheComponents: true`, `partialPrefetching: true`, Turbopack CSS rule.
 
-## Next session starts with
+## Current state (additional)
+- Step 5 harness implemented: Vitest unit tests plus Playwright API/browser E2E tests under `tests/`.
+- Deterministic fixtures live under `public/test-fixtures/`.
+- All test commands pass: `npx vitest run`, `npx playwright test`.
 
-- **Step 4: Frontend UI Components** — build `UrlInputBar.tsx`, `ExtractionProgress.tsx`, `GalleryToolbar.tsx`, `ImageCard.tsx`, `ImageGrid.tsx`, `LightboxModal.tsx`, and wire to `/api/extract` + `/api/download`.
+## Next session starts with
+- Optional hardening: move `@playwright/test` from dependencies to devDependencies; add optional external-site E2E tests behind `RUN_EXTERNAL=1`; investigate natural-dimension reporting from generated fixtures.
 
 ## Open questions
 

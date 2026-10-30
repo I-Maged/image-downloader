@@ -11,6 +11,8 @@ export interface ImageCandidate {
   width: number;
   height: number;
   alt?: string;
+  /** Origin page where the image was discovered; useful as a fetch Referer. */
+  pageUrl?: string;
 }
 
 /** High-level phases of the extraction pipeline. */

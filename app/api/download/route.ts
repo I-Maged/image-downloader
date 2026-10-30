@@ -13,6 +13,7 @@ interface DownloadItem {
   sourceUrl: string;
   detailUrl?: string;
   filename?: string;
+  pageUrl?: string;
 }
 
 function sanitizeFilename(name: string | undefined, fallbackUrl: string): string {
@@ -22,12 +23,45 @@ function sanitizeFilename(name: string | undefined, fallbackUrl: string): string
   return safe.length > 0 ? safe : "image";
 }
 
+function uniqueFilename(candidate: string, used: Set<string>): string {
+  const lower = candidate.toLowerCase();
+  if (!used.has(lower)) {
+    used.add(lower);
+    return candidate;
+  }
+
+  const dotIndex = candidate.lastIndexOf(".");
+  const hasExtension = dotIndex > 0 && dotIndex > candidate.lastIndexOf("/");
+  const stem = hasExtension ? candidate.slice(0, dotIndex) : candidate;
+  const extension = hasExtension ? candidate.slice(dotIndex) : "";
+
+  let counter = 2;
+  let next = `${stem} (${counter})${extension}`;
+  while (used.has(next.toLowerCase())) {
+    counter += 1;
+    next = `${stem} (${counter})${extension}`;
+  }
+  used.add(next.toLowerCase());
+  return next;
+}
+
 async function resolveFinalUrl(item: DownloadItem): Promise<string> {
   if (item.detailUrl) {
     const master = await resolveMasterAsset(item.detailUrl);
     return master ?? item.sourceUrl;
   }
   return item.sourceUrl;
+}
+
+function refererFor(item: DownloadItem, finalUrl: string): string {
+  if (item.pageUrl) return item.pageUrl;
+
+  try {
+    const origin = new URL(finalUrl).origin;
+    return `${origin}/`;
+  } catch {
+    return item.sourceUrl;
+  }
 }
 
 export async function POST(request: Request) {
@@ -52,7 +86,7 @@ export async function POST(request: Request) {
       const finalUrl = await resolveFinalUrl(item);
 
       const response = await fetch(finalUrl, {
-        headers: { Referer: item.sourceUrl, "User-Agent": USER_AGENT },
+        headers: { Referer: refererFor(item, finalUrl), "User-Agent": USER_AGENT },
         redirect: "follow",
       });
 
@@ -75,50 +109,61 @@ export async function POST(request: Request) {
       });
     }
 
-    // Multi selection: stream a ZIP archive containing the selected images.
-    const archive = new ZipArchive({ zlib: { level: 6 } });
-
-    const chunks: Buffer[] = [];
-    const collector = new Writable({
-      write(chunk, _encoding, callback) {
-        chunks.push(chunk as Buffer);
-        callback();
-      },
-    });
-
-    for (let i = 0; i < items.length; i += ZIP_BATCH_SIZE) {
-      const batch = items.slice(i, i + ZIP_BATCH_SIZE);
-
-      for (const item of batch) {
-        const finalUrl = await resolveFinalUrl(item);
-
-        const response = await fetch(finalUrl, {
-          headers: { Referer: item.sourceUrl, "User-Agent": USER_AGENT },
-          redirect: "follow",
-        });
-
-        if (response.ok && response.body) {
-          const webBody = response.body as unknown as Parameters<typeof Readable.fromWeb>[0];
-          const stream = Readable.fromWeb(webBody);
-          archive.append(stream, { name: sanitizeFilename(item.filename, finalUrl) });
-        }
-      }
-    }
-
-    archive.pipe(collector);
-    await archive.finalize();
-    const buffer = Buffer.concat(chunks);
-
-    const zipWebStream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(buffer);
-        controller.close();
-      },
-    });
-
+    // Multi selection: stream a ZIP archive directly to the client.
+    const usedNames = new Set<string>();
     const zipFilename = `images-${new Date().toISOString().replace(/[:.]/g, "-")}.zip`;
 
-    return new Response(zipWebStream, {
+    const webStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const sink = new Writable({
+          write(chunk, _encoding, callback) {
+            controller.enqueue(new Uint8Array(chunk as Buffer));
+            callback();
+          },
+          final(callback) {
+            controller.close();
+            callback();
+          },
+          destroy(error) {
+            if (error) controller.error(error);
+          },
+        });
+
+        const archive = new ZipArchive({ zlib: { level: 6 } });
+        archive.on("error", (error) => sink.destroy(error));
+        archive.pipe(sink);
+
+        (async () => {
+          try {
+            for (let i = 0; i < items.length; i += ZIP_BATCH_SIZE) {
+              const batch = items.slice(i, i + ZIP_BATCH_SIZE);
+
+              for (const item of batch) {
+                const finalUrl = await resolveFinalUrl(item);
+                const response = await fetch(finalUrl, {
+                  headers: { Referer: refererFor(item, finalUrl), "User-Agent": USER_AGENT },
+                  redirect: "follow",
+                });
+
+                if (!response.ok || !response.body) continue;
+
+                const entryName = uniqueFilename(
+                  sanitizeFilename(item.filename, finalUrl),
+                  usedNames,
+                );
+                archive.append(Readable.fromWeb(response.body as never), { name: entryName });
+              }
+            }
+
+            await archive.finalize();
+          } catch (error) {
+            sink.destroy(error instanceof Error ? error : new Error("Failed to create download archive"));
+          }
+        })();
+      },
+    });
+
+    return new Response(webStream, {
       status: 200,
       headers: {
         "Content-Type": "application/zip",

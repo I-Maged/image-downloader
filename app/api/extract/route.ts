@@ -22,11 +22,12 @@ function createExtractionStream(url: string, minSize: number): ReadableStream<Ui
         const images = await scrapeImages(url, {
           onProgress: (progress) => emit({ type: "progress", progress }),
         });
-        const threshold = typeof minSize === "number" && minSize > 0 ? minSize : DEFAULT_MIN_SIZE;
+        const applySizeFilter = typeof minSize === "number" && minSize > 0;
+        const threshold = applySizeFilter ? minSize : DEFAULT_MIN_SIZE;
 
         const seen = new Set<string>();
         const filteredImages = images.filter((image) => {
-          if (image.width < threshold || image.height < threshold) return false;
+          if (applySizeFilter && (image.width < threshold || image.height < threshold)) return false;
           if (seen.has(image.sourceUrl)) return false;
           seen.add(image.sourceUrl);
           return true;
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "URL must use http or https" }, { status: 400 });
   }
 
-  const threshold = typeof minSize === "number" && minSize > 0 ? minSize : DEFAULT_MIN_SIZE;
+  const threshold = typeof minSize === "number" && minSize >= 0 ? minSize : DEFAULT_MIN_SIZE;
 
   const stream = createExtractionStream(url, threshold);
 

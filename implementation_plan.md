@@ -231,7 +231,9 @@ downloader/
   - Build `ImageCard.tsx` and `ImageGrid.tsx` with selection checkboxes and dimension badges.
   - Build `LightboxModal.tsx` for full-screen inspection.
   - Wire `app/page.tsx` client dashboard to consume the streaming `/api/extract` and `/api/download` endpoints.
-- [ ] **Step 5: End-to-End Testing & Verification**
+- [x] **Step 5: End-to-End Testing & Verification**
+
+   Verified with deterministic local fixtures (`public/test-fixtures/`), Vitest unit tests, Playwright API integration tests, and Playwright browser E2E tests. Universal live-site verification is optional (`RUN_EXTERNAL=1`); Unsplash itself now blocks headless Chromium with a browser challenge and is intentionally excluded from the default suite (its detail-page resolver is unit-tested offline).
   - Test with the user's Unsplash example (`https://unsplash.com/` and individual photo detail pages) to verify source resolution (e.g., 1946 × 2455).
   - Test on standard non-Unsplash websites (blogs, e-commerce, documentation) to verify universal compatibility.
   - Verify single download and multi-item ZIP archive creation.
