@@ -220,7 +220,7 @@ downloader/
   - Create `lib/types.ts` defining data models (`ImageCandidate`, `ExtractionProgressState`).
   - Create `lib/image-resolver.ts` with `srcset` parsing, CDN query clearing, and detail-link resolvers.
   - Create `lib/scraper.ts` with Playwright browser management, auto-scrolling, and DOM extraction.
-- [ ] **Step 3: Server API Endpoints**
+- [x] **Step 3: Server API Endpoints**
   - Implement `app/api/extract/route.ts` with input validation, scraping execution, and error handling.
   - Implement `app/api/download/route.ts` with single-file proxying and streaming multi-file ZIP generation.
 - [ ] **Step 4: Frontend UI Components**
